@@ -1,6 +1,7 @@
 package celbuxhelpers
 
 import (
+	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/errorreporting"
 	"cloud.google.com/go/logging"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"github.com/golang/gddo/httputil/header"
 	"golang.org/x/net/context"
+	taskspb "google.golang.org/genproto/googleapis/cloud/tasks/v2"
 	ltype "google.golang.org/genproto/googleapis/logging/type"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,6 +28,7 @@ var ErrorClient *errorreporting.Client
 var DatastoreClient *datastore.Client
 var StorageClient *storage.Client
 var LoggingClient *logging.Client
+var TasksClient *cloudtasks.Client
 
 func GetProjectID() (string, error) {
 	// Get Project ID
@@ -33,7 +36,7 @@ func GetProjectID() (string, error) {
 	if projectID == "" {
 		return "", status.Error(codes.NotFound, "env var GOOGLE_CLOUD_PROJECT must be set")
 	}
-	
+
 	return projectID, nil
 }
 
@@ -59,8 +62,7 @@ func IntialiseClients(projectID string) error {
 	if DatastoreClient == nil {
 		DatastoreClient, err = datastore.NewClient(context.Background(), projectID)
 		if err != nil {
-			ErrorClient.Report(errorreporting.Entry{Error: err})
-			return err
+			return LogError(err)
 		}
 	}
 
@@ -68,8 +70,7 @@ func IntialiseClients(projectID string) error {
 	if LoggingClient == nil {
 		LoggingClient, err = logging.NewClient(context.Background(), projectID)
 		if err != nil {
-			ErrorClient.Report(errorreporting.Entry{Error: err})
-			return err
+			return LogError(err)
 		}
 	}
 
@@ -77,8 +78,15 @@ func IntialiseClients(projectID string) error {
 	if StorageClient == nil {
 		StorageClient, err = storage.NewClient(context.Background())
 		if err != nil {
-			ErrorClient.Report(errorreporting.Entry{Error: err})
-			return err
+			return LogError(err)
+		}
+	}
+
+	// Creates storage client
+	if TasksClient == nil {
+		TasksClient, err = cloudtasks.NewClient(context.Background())
+		if err != nil {
+			return LogError(err)
 		}
 	}
 
@@ -163,4 +171,30 @@ func DownloadObject(bucket string, object string) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+// createHTTPTask creates a new task with a HTTP target then adds it to a Queue.
+// e.g. projects/bulk-writes/locations/europe-west1/queues/datastore-queue
+func QueueHTTPRequest(projectID, locationID, queueID string, request *taskspb.HttpRequest) (*taskspb.Task, error) {
+	// Build the Task queue path.
+	queuePath := fmt.Sprintf("projects/%s/locations/%s/queues/%s", projectID, locationID, queueID)
+
+	// Build the Task payload.
+	// https://godoc.org/google.golang.org/genproto/googleapis/cloud/tasks/v2#CreateTaskRequest
+	req := &taskspb.CreateTaskRequest{
+		Parent: queuePath,
+		Task: &taskspb.Task{
+			// https://godoc.org/google.golang.org/genproto/googleapis/cloud/tasks/v2#HttpRequest
+			MessageType: &taskspb.Task_HttpRequest{
+				HttpRequest: request,
+			},
+		},
+	}
+
+	createdTask, err := TasksClient.CreateTask(context.Background(), req)
+	if err != nil {
+		return nil, LogError(err)
+	}
+
+	return createdTask, nil
 }
