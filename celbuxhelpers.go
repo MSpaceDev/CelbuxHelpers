@@ -15,6 +15,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 )
 
 /* GCP Helpers
@@ -26,7 +27,17 @@ var DatastoreClient *datastore.Client
 var StorageClient *storage.Client
 var LoggingClient *logging.Client
 
-//intialiseClients provides all required GCP clients for use in main app engine code
+func GetProjectID() (string, error) {
+	// Get Project ID
+	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
+	if projectID == "" {
+		return "", status.Error(codes.NotFound, "env var GOOGLE_CLOUD_PROJECT must be set")
+	}
+	
+	return projectID, nil
+}
+
+//IntialiseClients provides all required GCP clients for use in main app engine code
 func IntialiseClients(projectID string) error {
 	// Initialise error to prevent shadowing
 	var err error
