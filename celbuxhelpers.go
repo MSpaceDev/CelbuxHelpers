@@ -125,7 +125,20 @@ func GLog(name string, text string, severity *ltype.LogSeverity) {
 	})
 }
 
-// downloadFile downloads an object from Cloud Storage
+func LogError(err error) error {
+	// Log for Logs Viewer
+	ErrorClient.Report(errorreporting.Entry{
+		Error: err,
+	})
+
+	// Log for Local
+	fmt.Printf("Error: %v", err.Error())
+
+	// Optional for quick-hand returns in other func
+	return err
+}
+
+//DownloadObject downloads an object from Cloud Storage
 func DownloadObject(bucket string, object string) ([]byte, error) {
 	rc, err := StorageClient.Bucket(bucket).Object(object).NewReader(context.Background())
 	if err != nil {
