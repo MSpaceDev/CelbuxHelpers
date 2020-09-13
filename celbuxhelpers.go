@@ -27,7 +27,7 @@ var StorageClient *storage.Client
 var LoggingClient *logging.Client
 
 //intialiseClients provides all required GCP clients for use in main app engine code
-func intialiseClients(projectID string) error {
+func IntialiseClients(projectID string) error {
 	// Initialise error to prevent shadowing
 	var err error
 
@@ -78,7 +78,7 @@ func intialiseClients(projectID string) error {
 }
 
 // Writes the encoded marshalled json into the http writer mainly for the purpose of a response
-func encodeStruct(w *http.ResponseWriter, obj interface{}) error {
+func EncodeStruct(w *http.ResponseWriter, obj interface{}) error {
 	(*w).Header().Set("Content-Type", "application/json; charset=utf-8")
 	err := json.NewEncoder(*w).Encode(obj)
 	if err != nil {
@@ -89,7 +89,7 @@ func encodeStruct(w *http.ResponseWriter, obj interface{}) error {
 }
 
 // Decode request into provided struct pointer
-func decodeStruct(w http.ResponseWriter, r *http.Request, obj interface{}) error {
+func DecodeStruct(w http.ResponseWriter, r *http.Request, obj interface{}) error {
 	if r.Header.Get("Content-Type") != "" {
 		value, _ := header.ParseValueAndParams(r.Header, "Content-Type")
 		if value != "application/json" {
@@ -109,7 +109,7 @@ func decodeStruct(w http.ResponseWriter, r *http.Request, obj interface{}) error
 }
 
 //severity is nillable. Debug by default
-func gLog(name string, text string, severity *ltype.LogSeverity) {
+func GLog(name string, text string, severity *ltype.LogSeverity) {
 	// Sets log name to unix nano second
 	logger := LoggingClient.Logger(name)
 
@@ -129,7 +129,7 @@ func gLog(name string, text string, severity *ltype.LogSeverity) {
 }
 
 // downloadFile downloads an object from Cloud Storage
-func downloadFile(bucket string, object string) ([]byte, error) {
+func DownloadObject(bucket string, object string) ([]byte, error) {
 	rc, err := StorageClient.Bucket(bucket).Object(object).NewReader(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("Object(%q).NewReader: %v", object, err)
