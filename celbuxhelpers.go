@@ -62,9 +62,6 @@ func IntialiseClients(projectID string) error {
 		}
 	}
 
-	// Test error
-	ErrorClient.Report(errorreporting.Entry{Error: err})
-
 	// Creates storage client
 	if StorageClient == nil {
 		StorageClient, err = storage.NewClient(context.Background())
