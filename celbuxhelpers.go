@@ -207,7 +207,7 @@ type QueueServiceRequest struct {
 }
 
 // Properly splits up entities into 31MB chunks to be sent to queue-service coordinate writes
-// App Engine HTTP PUT limit is 32MB
+// App Engine HTTP PUT limit is 32MB.
 func WriteToDatastore(request QueueServiceRequest) error {
 	queueServiceRequest := QueueServiceRequest{
 		Kind: request.Kind,
