@@ -143,3 +143,26 @@ func DownloadObject(bucket string, object string) ([]byte, error) {
 
 	return data, nil
 }
+
+// Properly splits up entities into 31MB chunks to be sent to queue-service coordinate writes
+// App Engine HTTP PUT limit is 32MB
+func WriteToDatastore(kind string, entities []interface{}) {
+	type DataToSend []interface{}
+	var dataToSend DataToSend
+
+	var bits int
+	for _, entity := range entities {
+		bits += len(entity.([]byte))
+
+		megabytes := bits / 8000000
+		if megabytes >= 31 {
+			err := EncodeStruct(w, entities)
+			if err != nil {
+
+			}
+		}
+		else {
+
+		}
+	}
+}
