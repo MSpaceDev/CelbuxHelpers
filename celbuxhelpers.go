@@ -200,6 +200,7 @@ func QueueHTTPRequest(projectID, locationID, queueID string, request *taskspb.Ht
 	return createdTask, nil
 }
 
+// Used both for receiving data here, and sending to queue service
 type QueueServiceRequest struct {
 	Kind string
 	Entities []interface{}
@@ -207,16 +208,15 @@ type QueueServiceRequest struct {
 
 // Properly splits up entities into 31MB chunks to be sent to queue-service coordinate writes
 // App Engine HTTP PUT limit is 32MB
-
-func WriteToDatastore(kind string, entities []interface{}, opsPerInstance, entitiesPerRequest int) error {
+func WriteToDatastore(request QueueServiceRequest) error {
 	queueServiceRequest := QueueServiceRequest{
-		Kind: kind,
+		Kind: request.Kind,
 		Entities: nil,
 	}
 
 	var inOperation bool
 	var bits int
-	for _, entity := range entities {
+	for _, entity := range request.Entities {
 		// Set to true when operating
 		inOperation = true
 
