@@ -7,6 +7,7 @@ import (
 	"cloud.google.com/go/errorreporting"
 	"cloud.google.com/go/logging"
 	"cloud.google.com/go/storage"
+	b64 "encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/golang/gddo/httputil/header"
@@ -274,4 +275,24 @@ func sendRequest(data QueueServiceRequest) error {
 	}
 
 	return nil
+}
+
+func printHTTPBody(resp *http.Response) string {
+	body, err := ioutil.ReadAll(resp)
+	if err != nil {
+	    return err
+	}
+	return string(body)
+}
+
+func encrypt(data string) string {
+	return b64.URLEncoding.EncodeToString([]byte(data))
+}
+
+func decrypt(data string) (string, error) {
+	s, err := b64.URLEncoding.DecodeString(data)
+	if err != nil {
+		return "", helpers.LogError(err)
+	}
+	return string(s), nil
 }
