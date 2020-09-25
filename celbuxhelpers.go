@@ -1,7 +1,6 @@
 package celbuxhelpers
 
 import (
-	"bytes"
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/errorreporting"
@@ -199,100 +198,34 @@ func QueueHTTPRequest(projectID, locationID, queueID string, request *taskspb.Ht
 	return createdTask, nil
 }
 
-// Used both for receiving data here, and sending to queue service
-type QueueServiceRequest struct {
-	Kind string
-	Entities []interface{}
+func PrintHTTPBody(resp *http.Response) (string, error) {
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", LogError(err)
+	}
+
+	return string(body), nil
 }
 
-// Properly splits up entities into 31MB chunks to be sent to queue-service coordinate writes
-// App Engine HTTP PUT limit is 32MB
-func WriteToDatastore(request QueueServiceRequest) error {
-	queueServiceRequest := QueueServiceRequest{
-		Kind: request.Kind,
-		Entities: nil,
+func StructToBase64(in interface{}) (string, error) {
+	structJSON, err := json.Marshal(in)
+	if err != nil {
+	    return "", LogError(err)
 	}
 
-	var inOperation bool
-	var bits int
-	for _, entity := range request.Entities {
-		// Set to true when operating
-		inOperation = true
-
-		// Get megabytes
-		bits += len(entity.([]byte))
-		megabytes := bits / 8000000
-
-		// If data is over 31 megabytes, send HTTP request, else just add entity to slice
-		if megabytes >= 31 {
-			err := sendRequest(queueServiceRequest)
-			if err != nil {
-				return LogError(err)
-			}
-
-			inOperation = false
-			queueServiceRequest.Entities = nil
-		} else {
-			queueServiceRequest.Entities = append(queueServiceRequest.Entities, entity)
-		}
-	}
-
-	// Makes sure to write last data if for loop exited while still in operation
-	if inOperation {
-		err := sendRequest(queueServiceRequest)
-		if err != nil {
-			return LogError(err)
-		}
-
-		inOperation = false
-	}
-
-	return nil
+	return b64.URLEncoding.EncodeToString(structJSON), nil
 }
 
-func sendRequest(data QueueServiceRequest) error {
-	client := &http.Client{}
-	projectID, err := GetProjectID()
+func Base64ToStruct(base64 string, out interface{}) error {
+	structJSON, err := b64.URLEncoding.DecodeString(base64)
 	if err != nil {
 		return LogError(err)
 	}
 
-	var dataJSON []byte
-	dataJSON, err = json.Marshal(data)
-	if err != nil {
-		return LogError(err)
-	}
-
-	var req *http.Request
-	req, err = http.NewRequest(http.MethodPut, fmt.Sprintf("queue-service-dot-%v.ew.r.appspot.com/start_work?opsPerInstance=1&entitiesPerRequest=500", projectID), bytes.NewBuffer(dataJSON))
-	if err != nil {
-		return LogError(err)
-	}
-
-	_, err = client.Do(req)
+	err = json.Unmarshal(structJSON, &out)
 	if err != nil {
 		return LogError(err)
 	}
 
 	return nil
-}
-
-func printHTTPBody(resp *http.Response) string {
-	body, err := ioutil.ReadAll(resp)
-	if err != nil {
-	    return err
-	}
-	return string(body)
-}
-
-func encrypt(data string) string {
-	return b64.URLEncoding.EncodeToString([]byte(data))
-}
-
-func decrypt(data string) (string, error) {
-	s, err := b64.URLEncoding.DecodeString(data)
-	if err != nil {
-		return "", helpers.LogError(err)
-	}
-	return string(s), nil
 }

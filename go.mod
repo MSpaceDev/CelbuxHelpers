@@ -1,5 +1,7 @@
 module github.com/MSpaceDev/CelbuxHelpers
 
+replace github.com/MSpaceDev/CelbuxHelpers => ./
+
 go 1.15
 
 require (
