@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"github.com/golang/gddo/httputil/header"
 	"golang.org/x/net/context"
+	"google.golang.org/appengine"
 	taskspb "google.golang.org/genproto/googleapis/cloud/tasks/v2"
 	ltype "google.golang.org/genproto/googleapis/logging/type"
 	"google.golang.org/grpc/codes"
@@ -20,17 +21,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime"
+	"strings"
+	"time"
 )
-
-/* GCP Helpers
- * Celbux helpers for easy & neat integration with GCP in main app engine code
- * Requirement: Call initialiseClients(projectID) in main app start up
- */
-var ErrorClient *errorreporting.Client
-var DatastoreClient *datastore.Client
-var StorageClient *storage.Client
-var LoggingClient *logging.Client
-var TasksClient *cloudtasks.Client
 
 func GetProjectID() (string, error) {
 	// Get Project ID
@@ -42,8 +36,8 @@ func GetProjectID() (string, error) {
 	return projectID, nil
 }
 
-//IntialiseClients provides all required GCP clients for use in main app engine code
 func IntialiseClients(projectID string) error {
+	//IntialiseClients provides all required GCP clients for use in main app engine code
 	// Initialise error to prevent shadowing
 	var err error
 
@@ -95,8 +89,8 @@ func IntialiseClients(projectID string) error {
 	return nil
 }
 
-// Writes the encoded marshalled json into the http writer mainly for the purpose of a response
 func EncodeStruct(w http.ResponseWriter, obj interface{}) error {
+	// Writes the encoded marshalled json into the http writer mainly for the purpose of a response
 	(w).Header().Set("Content-Type", "application/json; charset=utf-8")
 	err := json.NewEncoder(w).Encode(obj)
 	if err != nil {
@@ -106,8 +100,8 @@ func EncodeStruct(w http.ResponseWriter, obj interface{}) error {
 	return nil
 }
 
-// Decode request into provided struct pointer
 func DecodeStruct(w http.ResponseWriter, r *http.Request, obj interface{}) error {
+	// Decode request into provided struct pointer
 	if r.Header.Get("Content-Type") != "" {
 		value, _ := header.ParseValueAndParams(r.Header, "Content-Type")
 		if value != "application/json" {
@@ -126,8 +120,8 @@ func DecodeStruct(w http.ResponseWriter, r *http.Request, obj interface{}) error
 	return nil
 }
 
-//severity is nillable. Debug by default
 func GLog(name string, text string, severity *ltype.LogSeverity) {
+	//severity is nillable. Debug by default
 	// Sets log name to unix nano second
 	logger := LoggingClient.Logger(name)
 
@@ -159,8 +153,8 @@ func LogError(err error) error {
 	return err
 }
 
-//DownloadObject downloads an object from Cloud Storage
 func DownloadObject(bucket string, object string) ([]byte, error) {
+	//DownloadObject downloads an object from Cloud Storage
 	rc, err := StorageClient.Bucket(bucket).Object(object).NewReader(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("Object(%q).NewReader: %v", object, err)
@@ -175,9 +169,10 @@ func DownloadObject(bucket string, object string) ([]byte, error) {
 	return data, nil
 }
 
-// createHTTPTask creates a new task with a HTTP target then adds it to a Queue.
-// e.g. projects/bulk-writes/locations/europe-west1/queues/datastore-queue
 func QueueHTTPRequest(projectID, locationID, queueID string, request *taskspb.HttpRequest) (*taskspb.Task, error) {
+	// createHTTPTask creates a new task with a HTTP target then adds it to a Queue.
+	// e.g. projects/bulk-writes/locations/europe-west1/queues/datastore-queue
+
 	// Build the Task queue path.
 	queuePath := fmt.Sprintf("projects/%s/locations/%s/queues/%s", projectID, locationID, queueID)
 
@@ -201,15 +196,15 @@ func QueueHTTPRequest(projectID, locationID, queueID string, request *taskspb.Ht
 	return createdTask, nil
 }
 
-// Used both for receiving data here, and sending to queue service
 type QueueServiceRequest struct {
+	// Used both for receiving data here, and sending to queue service
 	Kind string
 	Entities []interface{}
 }
 
-// Properly splits up entities into 31MB chunks to be sent to queue-service coordinate writes
-// App Engine HTTP PUT limit is 32MB
 func WriteToDatastore(request QueueServiceRequest) error {
+	// Properly splits up entities into 31MB chunks to be sent to queue-service coordinate writes
+	// App Engine HTTP PUT limit is 32MB
 	queueServiceRequest := QueueServiceRequest{
 		Kind: request.Kind,
 		Entities: nil,
@@ -279,22 +274,71 @@ func sendRequest(data QueueServiceRequest) error {
 	return nil
 }
 
-func printHTTPBody(resp *http.Response) string {
-	body, err := ioutil.ReadAll(resp)
+func PrintHTTPBody(resp *http.Response) (string, error) {
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-	    return err
+	    return "", LogError(err)
 	}
-	return string(body)
+	return string(body), nil
 }
 
-func encrypt(data string) string {
+func Encrypt(data string) string {
 	return b64.URLEncoding.EncodeToString([]byte(data))
 }
 
-func decrypt(data string) (string, error) {
+func Decrypt(data string) (string, error) {
 	s, err := b64.URLEncoding.DecodeString(data)
 	if err != nil {
-		return "", helpers.LogError(err)
+		return "", err
 	}
 	return string(s), nil
+}
+
+func GetTestName() string {
+	// Gets the current running method by reflection.
+	// this is useful for linking tests to functions for logging.
+
+	fpcs := make([]uintptr, 1)
+	runtime.Callers(2, fpcs)
+	caller := runtime.FuncForPC(fpcs[0] - 1)
+	r := strings.Replace(caller.Name(), "github.com/MSpaceDev/JiraOnTheGO/src/service", "", -1)
+	return strings.Replace(r, ".", "", -1)
+}
+
+func WriteFile(data string, name string) error {
+	f, err := os.Create(name)
+	if err != nil {
+	    return err
+	}
+	defer f.Close()
+	_, err = f.Write([]byte(data))
+	if err != nil {
+	    return err
+	}
+	return nil
+}
+
+func GetTimeString() string {
+	loc,_ := time.LoadLocation("Africa/Johannesburg")
+	startTime := time.Now().In(loc).String()
+	return startTime[:len(startTime)-18]
+}
+
+func GetKind(kind string) string {
+	if IsDev() {
+		return kind + KindSuffix
+	}
+	return kind
+}
+
+func SetKind(val string) {
+	if IsDev() {
+		KindSuffix = GetTimeString()
+		KindSuffix += val
+		fmt.Printf("KindSuffix :%v\n", KindSuffix)
+	}
+}
+
+func IsDev() bool {
+	return appengine.IsDevAppServer()
 }
